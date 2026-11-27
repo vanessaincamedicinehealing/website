@@ -22,3 +22,20 @@ One-time setup:
 Until the secrets exist, the workflow runs, skips the upload and passes.
 
 `.htaccess` sets up HTTPS redirects, caching, compression and the WebP file type on GoDaddy's Apache servers.
+
+## Running it as a cPanel Node.js app
+
+The repo also works with cPanel's **Setup Node.js App**. `server.js` is a small static file server with no dependencies, so you don't need **Run NPM Install**. `app.js` just loads `server.js`, so cPanel's default startup file works too. The server only serves `index.html`, `styles.css`, `script.js` and files in `assets/`; anything else returns 404.
+
+1. Put the site files in their own folder in the home directory, for example `incamedicine`. Don't use `public_html` itself, because cPanel writes the app's settings into `public_html/.htaccess` and the site's own `.htaccess` would overwrite them.
+2. In **Setup Node.js App**, create or edit the application:
+   - Node.js version: 18 or newer
+   - Application mode: Production
+   - Application root: `incamedicine`
+   - Application URL: the domain
+   - Application startup file: `app.js` (or `server.js`)
+3. Click **Save**, then **Restart**.
+4. Turn on HTTPS with **Domains → Force HTTPS Redirect** in cPanel. The `.htaccess` redirect doesn't apply to a Node app.
+5. To update automatically from GitHub, set the repository variable `FTP_SERVER_DIR` to `incamedicine/` and add the FTP secrets as described above. Content changes show up straight away. Restart the app in cPanel only if `server.js` changes.
+
+An "errno 2" (ENOENT) error in cPanel means a file it expects is missing from the application root: usually the startup file, or `package.json` if you clicked **Run NPM Install**.

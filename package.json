@@ -1,0 +1,13 @@
+{
+  "name": "incamedicine-website",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Static site for incamedicine.com.au, served by a dependency-free Node server for cPanel Node.js hosting.",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
