@@ -1,0 +1,48 @@
+name: Deploy to GoDaddy
+
+# Uploads the static site to GoDaddy cPanel hosting over FTPS whenever main changes.
+# Needs repository secrets FTP_SERVER, FTP_USERNAME and FTP_PASSWORD (see README).
+# Until they exist, the deploy step is skipped and the run passes.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-godaddy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    env:
+      FTP_SERVER: ${{ secrets.FTP_SERVER }}
+    steps:
+      - name: Check out
+        uses: actions/checkout@v4
+
+      - name: Skip notice (FTP secrets not set yet)
+        if: env.FTP_SERVER == ''
+        run: echo "::notice::FTP_SERVER secret is not set, so nothing was deployed. See README > Deploying to GoDaddy."
+
+      - name: Upload to GoDaddy over FTPS
+        if: env.FTP_SERVER != ''
+        uses: SamKirkland/FTP-Deploy-Action@v4.3.5
+        with:
+          server: ${{ secrets.FTP_SERVER }}
+          username: ${{ secrets.FTP_USERNAME }}
+          password: ${{ secrets.FTP_PASSWORD }}
+          protocol: ${{ vars.FTP_PROTOCOL || 'ftps' }}
+          server-dir: ${{ vars.FTP_SERVER_DIR || 'public_html/' }}
+          # Only the files the site serves. The full-size PNG originals stay in the repo
+          # as source material; the page uses the WebP copies.
+          exclude: |
+            **/.git*
+            **/.git*/**
+            .github/**
+            .claude/**
+            **/.impeccable/**
+            README.md
+            *.png
+            assets/*.png
