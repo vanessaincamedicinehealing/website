@@ -1,1 +1,18 @@
-YªçŠx³¬uç%j·Â+ar‰ì¶ë•ë_¢ºÞjË"‚v›•ëÚ®&›•ëj¹âžðjÇ^rV«yÜ"¶(žËn±é^µú+­æ¬²('i¹^½ªâi¹^±½¹ÍÐµ•¹Õ	ÕÑÑ½¸€ô‘½Õµ•¹Ð¹ÅÕ•ÉåM•±•Ñ½È œ¹µ•¹ÔµÑ½±”œ¤ì)½¹ÍÐ¹…Ù¥…Ñ¥½¸€ô‘½Õµ•¹Ð¹ÅÕ•ÉåM•±•Ñ½È œÍ¥Ñ”µ¹…Øœ¤ì()µ•¹Õ	ÕÑÑ½¸ü¹…‘‘Ù•¹Ñ1¥ÍÑ•¹•È ±¥¬œ°€ ¤€ôøì(€½¹ÍÐ¥Í=Á•¸€ôµ•¹Õ	ÕÑÑ½¸¹•ÑÑÑÉ¥‰ÕÑ” …É¥„µ•áÁ…¹‘•œ¤€ôôô€ÑÉÕ”œì(€µ•¹Õ	ÕÑÑ½¸¹Í•ÑÑÑÉ¥‰ÕÑ” …É¥„µ•áÁ…¹‘•œ°MÑÉ¥¹œ …¥Í=Á•¸¤¤ì(€¹…Ù¥…Ñ¥½¸ü¹±…ÍÍ1¥ÍÐ¹Ñ½±” ¥Ìµ½Á•¸œ°€…¥Í=Á•¸¤ì)ô¤ì()¹…Ù¥…Ñ¥½¸ü¹ÅÕ•ÉåM•±•Ñ½É±° „œ¤¹™½É…  ¡±¥¹¬¤€ôøì(€±¥¹¬¹…‘‘Ù•¹Ñ1¥ÍÑ•¹•È ±¥¬œ°€ ¤€ôøì(€€€µ•¹Õ	ÕÑÑ½¸ü¹Í•ÑÑÑÉ¥‰ÕÑ” …É¥„µ•áÁ…¹‘•œ°€™…±Í”œ¤ì(€€€¹…Ù¥…Ñ¥½¸¹±…ÍÍ1¥ÍÐ¹É•µ½Ù” ¥Ìµ½Á•¸œ¤ì(€ô¤ì)ô¤ì()½¹ÍÐå•…È€ô‘½Õµ•¹Ð¹ÅÕ•ÉåM•±•Ñ½È œå•…Èœ¤ì)¥˜€¡å•…È¤å•…È¹Ñ•áÑ½¹Ñ•¹Ð€ô¹•Ü…Ñ” ¤¹•ÑÕ±±e•…È ¤ì
+const menuButton = document.querySelector('.menu-toggle');
+const navigation = document.querySelector('#site-nav');
+
+menuButton?.addEventListener('click', () => {
+  const isOpen = menuButton.getAttribute('aria-expanded') === 'true';
+  menuButton.setAttribute('aria-expanded', String(!isOpen));
+  navigation?.classList.toggle('is-open', !isOpen);
+});
+
+navigation?.querySelectorAll('a').forEach((link) => {
+  link.addEventListener('click', () => {
+    menuButton?.setAttribute('aria-expanded', 'false');
+    navigation.classList.remove('is-open');
+  });
+});
+
+const year = document.querySelector('#year');
+if (year) year.textContent = new Date().getFullYear();
