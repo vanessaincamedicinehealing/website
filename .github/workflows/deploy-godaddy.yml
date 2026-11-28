@@ -1,6 +1,6 @@
 name: Deploy to GoDaddy
 
-# On every push to main, uploads index.html, styles.css, script.js, robots.txt, sitemap.xml and assets/ to GoDaddy over SFTP.
+# On every push to main, uploads the .html pages, styles.css, script.js, robots.txt, sitemap.xml and assets/ to GoDaddy over SFTP.
 # Needs repository secrets SFTP_USERNAME and SFTP_PASSWORD (see README).
 # It never deletes anything and only uploads into a folder that holds both index.html and wp-config.php.
 
@@ -49,7 +49,7 @@ jobs:
 
           # Version the CSS/JS links so browsers fetch new copies (GoDaddy tells them to cache for 31 days).
           v="${GITHUB_SHA::8}"
-          sed -i -e "s|href=\"styles.css\"|href=\"styles.css?v=$v\"|" -e "s|src=\"script.js\"|src=\"script.js?v=$v\"|" index.html
+          sed -i -e "s|href=\"styles.css\"|href=\"styles.css?v=$v\"|" -e "s|src=\"script.js\"|src=\"script.js?v=$v\"|" *.html
 
-          sftp "cd '$root'; put styles.css; put script.js; put robots.txt; put sitemap.xml; mirror -R --no-perms --parallel=4 --exclude-glob '*.png' assets assets; put index.html"
+          sftp "cd '$root'; put styles.css; put script.js; put robots.txt; put sitemap.xml; mirror -R --no-perms --parallel=4 --exclude-glob '*.png' assets assets; mput *.html"
           echo "::notice::Uploaded. Now flush the cache in GoDaddy: Hosting Settings > Flush Cache > Flush Now."
