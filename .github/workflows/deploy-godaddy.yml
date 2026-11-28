@@ -1,13 +1,22 @@
 name: Deploy to GoDaddy
 
-# Uploads the static site to GoDaddy cPanel hosting over FTPS whenever main changes.
-# Needs repository secrets FTP_SERVER, FTP_USERNAME and FTP_PASSWORD (see README).
+# Uploads the site to GoDaddy Managed WordPress hosting over SFTP whenever main changes.
+# Needs repository secrets SFTP_SERVER, SFTP_USERNAME and SFTP_PASSWORD (see README).
 # Until they exist, the deploy step is skipped and the run passes.
+#
+# Safety: it only uploads index.html, styles.css, script.js and assets/ (no PNG originals).
+# It never deletes anything, and never touches WordPress files or the server's .htaccess.
+# It refuses to upload unless the target folder holds both index.html and wp-config.php.
 
 on:
   push:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Only connect and list the target folder; upload nothing"
+        type: boolean
+        default: true
 
 permissions:
   contents: read
@@ -20,32 +29,55 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     env:
-      FTP_SERVER: ${{ secrets.FTP_SERVER }}
+      SFTP_SERVER: ${{ secrets.SFTP_SERVER }}
+      SFTP_USERNAME: ${{ secrets.SFTP_USERNAME }}
+      LFTP_PASSWORD: ${{ secrets.SFTP_PASSWORD }}
+      SFTP_SERVER_DIR: ${{ vars.SFTP_SERVER_DIR }}
+      DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run }}
     steps:
       - name: Check out
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
-      - name: Skip notice (FTP secrets not set yet)
-        if: env.FTP_SERVER == ''
-        run: echo "::notice::FTP_SERVER secret is not set, so nothing was deployed. See README > Deploying to GoDaddy."
+      - name: Skip notice (SFTP secrets not set yet)
+        if: env.SFTP_SERVER == ''
+        run: echo "::notice::SFTP_SERVER secret is not set, so nothing was deployed. See README > Deploying to GoDaddy."
 
-      - name: Upload to GoDaddy over FTPS
-        if: env.FTP_SERVER != ''
-        uses: SamKirkland/FTP-Deploy-Action@8e83cea8672e3fbcbb9fdafff34debf6ae4c5f65 # v4.3.5
-        with:
-          server: ${{ secrets.FTP_SERVER }}
-          username: ${{ secrets.FTP_USERNAME }}
-          password: ${{ secrets.FTP_PASSWORD }}
-          protocol: ${{ vars.FTP_PROTOCOL || 'ftps' }}
-          server-dir: ${{ vars.FTP_SERVER_DIR || 'public_html/' }}
-          # Only the files the site serves. The full-size PNG originals stay in the repo
-          # as source material; the page uses the WebP copies.
-          exclude: |
-            **/.git*
-            **/.git*/**
-            .github/**
-            .claude/**
-            **/.impeccable/**
-            README.md
-            *.png
-            assets/*.png
+      - name: Install lftp
+        if: env.SFTP_SERVER != ''
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq lftp
+
+      - name: Find and check the web root
+        if: env.SFTP_SERVER != ''
+        run: |
+          set -euo pipefail
+          sftp() { lftp -c "set sftp:auto-confirm yes; set net:max-retries 2; set net:timeout 30; open --env-password -u \"$SFTP_USERNAME\" sftp://$SFTP_SERVER; $1"; }
+          is_root() { listing=$(sftp "cls -1 '$1/'" 2>/dev/null || true); grep -qx 'index.html' <<<"$(basename -a $listing 2>/dev/null)" && grep -qx 'wp-config.php' <<<"$(basename -a $listing 2>/dev/null)"; }
+          if [ -n "$SFTP_SERVER_DIR" ]; then candidates="$SFTP_SERVER_DIR"; else candidates=". html"; fi
+          root=""
+          for d in $candidates; do
+            echo "Checking '$d'..."
+            if is_root "$d"; then root="$d"; break; fi
+          done
+          if [ -z "$root" ]; then
+            echo "::error::No folder among '$candidates' contains both index.html and wp-config.php. Set the SFTP_SERVER_DIR repository variable to the site's web root."
+            sftp "cls -1 ./" || true
+            exit 1
+          fi
+          echo "Web root: $root"
+          echo "WEB_ROOT=$root" >> "$GITHUB_ENV"
+          sftp "cls -l '$root/'"
+
+      - name: Upload site files
+        if: env.SFTP_SERVER != '' && env.DRY_RUN != 'true'
+        run: |
+          set -euo pipefail
+          # Bust browser caches for CSS/JS: GoDaddy's CDN tells browsers to keep files for 31 days.
+          v="${GITHUB_SHA::8}"
+          sed -i -e "s|href=\"styles.css\"|href=\"styles.css?v=$v\"|" -e "s|src=\"script.js\"|src=\"script.js?v=$v\"|" index.html
+          grep -q "styles.css?v=$v" index.html && grep -q "script.js?v=$v" index.html
+          lftp -c "set sftp:auto-confirm yes; set net:max-retries 2; set net:timeout 30; open --env-password -u \"$SFTP_USERNAME\" sftp://$SFTP_SERVER; \
+            cd '$WEB_ROOT'; \
+            put styles.css; put script.js; \
+            mirror -R --no-perms --parallel=4 --exclude-glob '*.png' --exclude-glob '.DS_Store' assets assets; \
+            put index.html"
+          echo "::notice::Uploaded. Flush the cache in GoDaddy (Hosting Settings > Flush Cache) so visitors get the new version."
