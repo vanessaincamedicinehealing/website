@@ -264,6 +264,7 @@ h1 em { color: var(--forest); font: italic 700 .88em/.9 var(--display); letter-s
 .service-prose p, .service-prose li { color: var(--muted-warm); font-size: 15px; line-height: 1.85; }
 .service-prose em { font-style: italic; }
 .service-figure { margin: 34px 0; }
+.service-figure.is-portrait img { max-width: 420px; max-height: none; margin-inline: auto; }
 .service-figure img { border: 6px solid rgba(250,239,217,.72); outline: 1px solid rgba(104,65,27,.3); outline-offset: -10px; max-height: 520px; object-fit: cover; }
 .service-note { margin-top: 36px; padding-top: 14px; border-top: 1px solid var(--line); font-style: italic; }
 .service-other ul { margin: 0; padding: 0; list-style: none; }
