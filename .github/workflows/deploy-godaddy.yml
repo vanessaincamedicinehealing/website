@@ -1,22 +1,13 @@
 name: Deploy to GoDaddy
 
-# Uploads the site to GoDaddy Managed WordPress hosting over SFTP whenever main changes.
-# Needs repository secrets SFTP_SERVER, SFTP_USERNAME and SFTP_PASSWORD (see README).
-# Until they exist, the deploy step is skipped and the run passes.
-#
-# Safety: it only uploads index.html, styles.css, script.js and assets/ (no PNG originals).
-# It never deletes anything, and never touches WordPress files or the server's .htaccess.
-# It refuses to upload unless the target folder holds both index.html and wp-config.php.
+# On every push to main, uploads index.html, styles.css, script.js and assets/ to GoDaddy over SFTP.
+# Needs repository secrets SFTP_USERNAME and SFTP_PASSWORD (see README).
+# It never deletes anything and only uploads into a folder that holds both index.html and wp-config.php.
 
 on:
   push:
     branches: [main]
   workflow_dispatch:
-    inputs:
-      dry_run:
-        description: "Only connect and list the target folder; upload nothing"
-        type: boolean
-        default: true
 
 permissions:
   contents: read
@@ -29,55 +20,36 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     env:
-      SFTP_SERVER: ${{ secrets.SFTP_SERVER }}
+      SFTP_SERVER: 1329909.us21.ssh.myftpupload.com
+      # The server's public SSH host key, so the upload refuses to talk to an impostor.
+      SFTP_HOST_KEY: 1329909.us21.ssh.myftpupload.com ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAILwQwncFCRpxxYViJR+ogl8E73kt/A2c+4QA7q9Qd5r4
       SFTP_USERNAME: ${{ secrets.SFTP_USERNAME }}
       LFTP_PASSWORD: ${{ secrets.SFTP_PASSWORD }}
-      SFTP_SERVER_DIR: ${{ vars.SFTP_SERVER_DIR }}
-      DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run }}
     steps:
       - name: Check out
+        if: env.SFTP_USERNAME != ''
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
-      - name: Skip notice (SFTP secrets not set yet)
-        if: env.SFTP_SERVER == ''
-        run: echo "::notice::SFTP_SERVER secret is not set, so nothing was deployed. See README > Deploying to GoDaddy."
-
-      - name: Install lftp
-        if: env.SFTP_SERVER != ''
-        run: sudo apt-get update -qq && sudo apt-get install -y -qq lftp
-
-      - name: Find and check the web root
-        if: env.SFTP_SERVER != ''
+      - name: Upload
+        if: env.SFTP_USERNAME != ''
         run: |
           set -euo pipefail
-          sftp() { lftp -c "set sftp:auto-confirm yes; set net:max-retries 2; set net:timeout 30; open --env-password -u \"$SFTP_USERNAME\" sftp://$SFTP_SERVER; $1"; }
-          is_root() { listing=$(sftp "cls -1 '$1/'" 2>/dev/null || true); grep -qx 'index.html' <<<"$(basename -a $listing 2>/dev/null)" && grep -qx 'wp-config.php' <<<"$(basename -a $listing 2>/dev/null)"; }
-          if [ -n "$SFTP_SERVER_DIR" ]; then candidates="$SFTP_SERVER_DIR"; else candidates=". html"; fi
+          sudo apt-get update -qq && sudo apt-get install -y -qq lftp
+          mkdir -p ~/.ssh && echo "$SFTP_HOST_KEY" > ~/.ssh/known_hosts
+          sftp() { lftp -c "set sftp:connect-program 'ssh -a -x -o StrictHostKeyChecking=yes'; set net:max-retries 2; set net:timeout 30; open --env-password -u \"$SFTP_USERNAME\" sftp://$SFTP_SERVER; $1"; }
+
+          # Find the web root: the folder holding both index.html and wp-config.php.
           root=""
-          for d in $candidates; do
-            echo "Checking '$d'..."
-            if is_root "$d"; then root="$d"; break; fi
+          for d in . html; do
+            files=$(sftp "cls -1 '$d/'" 2>/dev/null | xargs -rn1 basename || true)
+            if grep -qx index.html <<<"$files" && grep -qx wp-config.php <<<"$files"; then root="$d"; break; fi
           done
-          if [ -z "$root" ]; then
-            echo "::error::No folder among '$candidates' contains both index.html and wp-config.php. Set the SFTP_SERVER_DIR repository variable to the site's web root."
-            sftp "cls -1 ./" || true
-            exit 1
-          fi
-          echo "Web root: $root"
-          echo "WEB_ROOT=$root" >> "$GITHUB_ENV"
-          sftp "cls -l '$root/'"
+          [ -n "$root" ] || { echo "::error::Couldn't find the web root (a folder with index.html and wp-config.php)."; exit 1; }
+          echo "Uploading to '$root'"
 
-      - name: Upload site files
-        if: env.SFTP_SERVER != '' && env.DRY_RUN != 'true'
-        run: |
-          set -euo pipefail
-          # Bust browser caches for CSS/JS: GoDaddy's CDN tells browsers to keep files for 31 days.
+          # Version the CSS/JS links so browsers fetch new copies (GoDaddy tells them to cache for 31 days).
           v="${GITHUB_SHA::8}"
           sed -i -e "s|href=\"styles.css\"|href=\"styles.css?v=$v\"|" -e "s|src=\"script.js\"|src=\"script.js?v=$v\"|" index.html
-          grep -q "styles.css?v=$v" index.html && grep -q "script.js?v=$v" index.html
-          lftp -c "set sftp:auto-confirm yes; set net:max-retries 2; set net:timeout 30; open --env-password -u \"$SFTP_USERNAME\" sftp://$SFTP_SERVER; \
-            cd '$WEB_ROOT'; \
-            put styles.css; put script.js; \
-            mirror -R --no-perms --parallel=4 --exclude-glob '*.png' --exclude-glob '.DS_Store' assets assets; \
-            put index.html"
-          echo "::notice::Uploaded. Flush the cache in GoDaddy (Hosting Settings > Flush Cache) so visitors get the new version."
+
+          sftp "cd '$root'; put styles.css; put script.js; mirror -R --no-perms --parallel=4 --exclude-glob '*.png' assets assets; put index.html"
+          echo "::notice::Uploaded. Now flush the cache in GoDaddy: Hosting Settings > Flush Cache > Flush Now."
